@@ -138,6 +138,30 @@ const whatsappModal = document.getElementById('whatsapp-modal');
 const whatsappClose = document.querySelector('.whatsapp-close');
 const whatsappForm = document.getElementById('whatsapp-form');
 
+// Leer parámetros UTM de la URL (o de sessionStorage si ya se capturaron antes)
+function getUtmParams() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign'];
+    const utms = {};
+    utmKeys.forEach(function(key) {
+        const val = urlParams.get(key);
+        if (val) { sessionStorage.setItem(key, val); }
+        utms[key] = sessionStorage.getItem(key) || '';
+    });
+    return utms;
+}
+
+// Enviar datos a Google Sheets via Apps Script
+function sendToGoogleSheets(data) {
+    const appsScriptUrl = 'https://script.google.com/macros/s/AKfycbw5RkAsFLdNT6bzKCDRcWpf8M4Dg33ru0OZZg8nCsDf0DIW29w_wCfx2Kw9O_3F_95m/exec';
+    fetch(appsScriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    }).catch(function() {});
+}
+
 if (whatsappFloat) {
     whatsappFloat.addEventListener('click', () => {
         whatsappModal.classList.add('active');
@@ -171,10 +195,47 @@ if (whatsappForm) {
         
         const whatsappLink = `https://wa.me/56940329987?text=${text}`;
         window.open(whatsappLink, '_blank');
+
+        // Enviar a Google Sheets
+        var utmsWs = getUtmParams();
+        sendToGoogleSheets({
+            nombre: nombre,
+            email: email,
+            telefono: phone,
+            proyecto: 'Valle Bucalemu',
+            plan: tiempoCompra,
+            utm_source: utmsWs.utm_source,
+            utm_medium: utmsWs.utm_medium,
+            utm_campaign: utmsWs.utm_campaign,
+            origen: 'Formulario WhatsApp'
+        });
         
         whatsappForm.reset();
         whatsappModal.classList.remove('active');
     });
+}
+
+// Thank You Page
+function showThankYouPage(data) {
+    const footerForm = document.querySelector('.footer-form');
+    if (footerForm) {
+        footerForm.innerHTML = `
+            <div style="text-align: center; padding: 50px 0;">
+                <div style="background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3); border-radius: 15px; padding: 50px; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #fff; margin-bottom: 20px; font-size: 2rem;">¡Gracias por tu interés!</h2>
+                    <p style="color: rgba(255,255,255,0.85); font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+                        Hemos recibido tu solicitud correctamente. Nuestro equipo se contactará contigo pronto para brindarte más información sobre Valle Bucalemu.
+                    </p>
+                    <p style="color: rgba(255,255,255,0.65); font-size: 14px; margin-bottom: 20px;">
+                        <strong>Datos recibidos:</strong><br>
+                        Nombre: ${data.nombre}<br>
+                        Email: ${data.email}<br>
+                        Teléfono: ${data.telefono}
+                    </p>
+                </div>
+            </div>
+        `;
+    }
 }
 
 // Contact Form Submit
@@ -182,19 +243,39 @@ const contactForm = document.querySelector('.contact-form');
 if (contactForm) {
     contactForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        
+
         const nombre = contactForm.querySelector('input[name="nombre"]').value;
         const email = contactForm.querySelector('input[name="email"]').value;
         const phone = contactForm.querySelector('input[name="telefono"]').value;
         const tiempoCompra = contactForm.querySelector('select[name="tiempo_compra"]').value;
         const mensaje = contactForm.querySelector('textarea[name="mensaje"]').value;
-        
-        const text = `Hola, me gustaría consultar sobre Valle Bucalemu%0A%0ANombre: ${nombre}%0AEmail: ${email}%0ATeléfono: ${phone}%0AQuiero comprar en: ${tiempoCompra}%0AMensaje: ${mensaje}`;
-        
-        const whatsappLink = `https://wa.me/56940329987?text=${text}`;
-        window.open(whatsappLink, '_blank');
-        
-        contactForm.reset();
+
+        const submitBtn = contactForm.querySelector('.btn-submit');
+        if (submitBtn) submitBtn.disabled = true;
+
+        // Enviar a Google Sheets via webhook
+        var utms = getUtmParams();
+        const appsScriptUrl = 'https://script.google.com/macros/s/AKfycbw5RkAsFLdNT6bzKCDRcWpf8M4Dg33ru0OZZg8nCsDf0DIW29w_wCfx2Kw9O_3F_95m/exec';
+        fetch(appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nombre: nombre,
+                email: email,
+                telefono: phone,
+                proyecto: 'Valle Bucalemu',
+                plan: tiempoCompra,
+                mensaje: mensaje,
+                utm_source: utms.utm_source,
+                utm_medium: utms.utm_medium,
+                utm_campaign: utms.utm_campaign,
+                origen: 'Formulario Contacto'
+            })
+        }).catch(function() {});
+
+        // Mostrar thank you page
+        showThankYouPage({ nombre: nombre, email: email, telefono: phone });
     });
 }
 
@@ -287,8 +368,10 @@ document.querySelectorAll('.gallery-item').forEach(el => {
 // Smooth scroll
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        if (!href || href === '#') return;
         e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
+        const target = document.querySelector(href);
         if (target) {
             target.scrollIntoView({
                 behavior: 'smooth',
@@ -296,4 +379,49 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             });
         }
     });
+});
+
+// Modal Reservar
+const btnReservarNav = document.getElementById('btn-reservar-nav');
+const reservarModal = document.getElementById('reservar-modal');
+const reservarModalClose = document.querySelector('.reservar-modal-close');
+const btnReservarAhora = document.getElementById('btn-reservar-ahora');
+
+if (btnReservarNav) {
+    btnReservarNav.addEventListener('click', (e) => {
+        e.preventDefault();
+        reservarModal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    });
+}
+
+function closeReservarModal() {
+    reservarModal.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+if (reservarModalClose) {
+    reservarModalClose.addEventListener('click', closeReservarModal);
+}
+
+if (btnReservarAhora) {
+    btnReservarAhora.addEventListener('click', () => {
+        closeReservarModal();
+        const mensaje = encodeURIComponent('Hola, vi sus opciones de reservas y me interesa hacer una. ¿Me pueden dar más información?');
+        window.open(`https://wa.me/56940329987?text=${mensaje}`, '_blank');
+    });
+}
+
+if (reservarModal) {
+    reservarModal.addEventListener('click', (e) => {
+        if (e.target === reservarModal) {
+            closeReservarModal();
+        }
+    });
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && reservarModal && reservarModal.classList.contains('active')) {
+        closeReservarModal();
+    }
 });
